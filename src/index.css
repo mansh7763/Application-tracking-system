@@ -1,0 +1,98 @@
+/* src/index.css */
+body {
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 100vh;
+  margin: 0;
+  background-color: #121212;
+  color: #e0e0e0;
+  padding: 20px;
+}
+
+.container {
+  background: #1e1e1e;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  margin-bottom: 20px;
+}
+
+.input-group {
+  display: flex;
+  gap: 10px;
+}
+
+.input-group input, .input-group label {
+  padding: 10px;
+  border: 2px solid #333;
+  border-radius: 5px;
+  background-color: #2e2e2e;
+  color: #e0e0e0;
+  outline: none;
+  flex: 1;
+}
+
+.input-group input:focus, .input-group label:focus {
+  border-color: #6200ea;
+}
+
+.input-group .desc {
+  flex: 7;
+}
+
+.input-group .num-candidates {
+  flex: 3;
+}
+
+.prompt-group {
+  display: flex;
+  gap: 10px;
+}
+
+.prompt-group input {
+  flex: 9;
+  padding: 10px;
+  border: 2px solid #333;
+  border-radius: 5px;
+  background-color: #2e2e2e;
+  color: #e0e0e0;
+  outline: none;
+}
+
+.prompt-group input:focus {
+  border-color: #6200ea;
+}
+
+button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  background-color: #6200ea;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #3700b3;
+}
+
+.output {
+  width: 90%;
+  padding: 20px;
+  border: 1px solid #333;
+  border-radius: 5px;
+  background-color: #2e2e2e;
+}
+
+.output div {
+  margin-bottom: 10px;
+}
+
+h2 {
+  margin-bottom: 10px;
+}
