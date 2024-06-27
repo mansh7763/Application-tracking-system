@@ -1,5 +1,5 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+# from flask import Flask, request, jsonify
+# from flask_cors import CORS
 from supabase import create_client, Client
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
@@ -11,13 +11,13 @@ import requests
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from io import BytesIO
-
 load_dotenv()
-
 logging.basicConfig(level=logging.DEBUG)
+from sentence_transformers import SentenceTransformer, util
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
-app = Flask(__name__)
-CORS(app) 
+# app = Flask(__name__)
+# CORS(app) 
 DATABASE_URL = os.getenv('DATABASE_URL')
 engine = create_engine(DATABASE_URL)
 SUPABASE_URL = os.getenv('SUPABASE_URL')
@@ -26,36 +26,19 @@ print(SUPABASE_KEY)
 supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
-def fetch_urls(category):
-    # Fetch all rows from the specified category table
-    response = supabase_client.table(category).select('url').execute()
-    
-    # Check for errors
-    # if response.error:
-    #     print(f"Error: {response.error.message}")
-    #     return []
-    
-    # Extract URLs from each row and collect them into a list
-    urls = [row['url'] for row in response.data]
-    return urls
-
 def extract_text_from_pdf(url):
     response = requests.get(url)
     response.raise_for_status()  # Ensure the request was successful
-    pdf_data = BytesIO(response.content)
-    
+    pdf_data = BytesIO(response.content) 
     document = fitz.open(stream=pdf_data, filetype="pdf")
     text = ""
     for page in document:
-        text += page.get_text()
-    
+        text += page.get_text() 
     logging.debug(f"Text extracted successfully: {text[:20000]}")  # Log the first 1000 characters for brevity
     return text
 
-from sentence_transformers import SentenceTransformer, util
-model = SentenceTransformer('all-MiniLM-L6-v2')
 
-def compute_similarity(text, job_description, model, util):
+def compute_similarity(text, job_description ):#, model, util
     # Compute embeddings for the text and job description
     jd_embedding = model.encode(job_description, convert_to_tensor=True)
     content_embedding = model.encode(text, convert_to_tensor=True)

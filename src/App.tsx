@@ -1,6 +1,6 @@
 // src/App.jsx
-import React from 'react';
-import PromptInput from './components/PromptInput';
+// import React from 'react';
+import PromptInput from "./components/PromptInput.tsx";
 
 const App = () => {
   return (
