@@ -83,7 +83,15 @@ def upload_file():
         data = request.json
         job_description = data.get('jobDesc')
         logging.debug(f"Received job description: {job_description}")
-        job_description_embeddings = get_embeddings(job_description)
+        job_description_text = "You are a hiring manager at a company. You work is to judge the resumes on the basis of job description. You have to figure out some key points from the job description which i can easily check in the candidates resume. I'll give you the job description. These are the key points i needed from the job decription: 1. Qualifications required for the job. 2. Skills required for this job. 3. Preferred skills 4. Candidates roles and responsiblities"
+        job_description_text += f"\n\nJob Description:\n{job_description}"
+
+        # Get response from LLM
+        job_description_response = get_response_from_llm(job_description_text)
+        logging.debug(f"Response from LLM: {job_description_response}")
+        job_description_response = job_description_response.replace("*", "")
+        logging.debug(f"Response from LLM after removing *: {job_description_response}")
+        job_description_embeddings = get_embeddings(job_description_response)
         # logging.debug(f"Computed embeddings for job description: {job_description_embeddings}")
 
         files = data.get('files', [])
@@ -92,11 +100,11 @@ def upload_file():
         for file in files:
             file_content = base64.b64decode(file['content'])
             content = extract_text_from_pdf(BytesIO(file_content))
-            logging.debug(f"Extracted text from PDF: {content}")
+            # logging.debug(f"Extracted text from PDF: {content}")
 
             if content:
                 content_embeddings = get_embeddings(content)
-                logging.debug(f"Computed embeddings for content: {content_embeddings}")
+                # logging.debug(f"Computed embeddings for content: {content_embeddings}")
 
                 score = util.cos_sim(job_description_embeddings, content_embeddings)
                 logging.debug(f"Computed similarity score: {score}")
@@ -107,7 +115,7 @@ def upload_file():
                     'score': score.item(), 
                     'embedding': content_embeddings.tolist()
                 }).execute()
-                logging.debug(f"Saved data to database: {res}")
+                # logging.debug(f"Saved data to database: {res}")
 
             else:
                 logging.warning("Empty content extracted from PDF")
@@ -129,13 +137,17 @@ def prompt():
 
         # Fetch top 100 resumes and their embeddings
         # Fetch top 100 resumes and their embeddings
-        response = supabase_client.table('resumes').select('resumetext', 'embedding').order('score', desc=True).limit(100).execute()
+        response = supabase_client.table('resumes').select('resumetext', 'embedding', 'score').order('score', desc=True).limit(100).execute()
 
         # Check if the response has data
         if response.data:
             # Extract resume content and embeddings
             resume_content = [row['resumetext'] for row in response.data]
             top_n_embeddings = [row['embedding'] for row in response.data]
+            resume_scores = [row['score'] for row in response.data]
+            resume_score_100 = [score * 100.0 for score in resume_scores]
+            logging.debug(f"resume score 100: {resume_score_100}")
+            logging.debug(f"resume score length: {len(resume_score_100)}")
 
             # logging.debug(f"resume content: {resume_content}")
         else:
@@ -175,9 +187,19 @@ def prompt():
 
         logging.debug(f"Similarities datatype: {type(similarities)}")
 
+        # multiply the similarity score with 100 and then again multiplied with previous score
+        similarities = [score * 100.0 for score in similarities]
+        logging.debug(f"Query Similarities score: {similarities}")
+        logging.debug(f"Query Similarities score: {len(similarities)}")
+        
+        updated_similarity_score = [a*b for a,b in zip(similarities,resume_score_100)]
+
+        logging.debug(f"updated Similarities score: {updated_similarity_score}")
+
+
 
         # Get top N indices
-        similarities = np.array(similarities)
+        similarities = np.array(updated_similarity_score)
         similarity_position = np.argsort(similarities)
         logging.debug(f"Indices are: {similarity_position}")
         top_indices= sorted(range(len(similarity_position)), key=lambda i: similarity_position[i], reverse=True)
@@ -187,12 +209,12 @@ def prompt():
 
         # Retrieve the content of the top N resumes
         all_pdf_texts = [resume_content[i] for i in output_indices]
-        logging.debug(f"Top N resume content: {all_pdf_texts}")
+        # logging.debug(f"Top N resume content: {all_pdf_texts}")
 
 
         # Create input text for LLM
         input_text = create_input_text(all_pdf_texts, number, query)
-        logging.debug(f"Input text for LLM: {input_text}")
+        # logging.debug(f"Input text for LLM: {input_text}")
 
         # Get response from LLM
         final_response = get_response_from_llm(input_text)
