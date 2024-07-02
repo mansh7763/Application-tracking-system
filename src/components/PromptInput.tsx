@@ -17,6 +17,8 @@ const PromptInput: React.FC = () => {
   const [jobDesc, setJobDesc] = useState<string>("");
   const [prompt, setPrompt] = useState<string>("");
   const [shortlistedCand, setShortlistedCand] = useState<string>("");
+  const [chatMessage, setChatMessage] = useState<string>("");
+  const [chatHistory, setChatHistory] = useState<string[]>([]);
   const [output, setOutput] = useState<Output | null>(null);
   const [initialSubmitted, setInitialSubmitted] = useState<boolean>(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -126,6 +128,36 @@ const PromptInput: React.FC = () => {
         ...prevCheckpoints,
         "Error during prompt submission.",
       ]);
+    }
+  };
+
+  const handleChatSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch("http://localhost:5000/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: chatMessage,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setChatHistory((prevHistory) => [
+        ...prevHistory,
+        `User: ${chatMessage}`,
+        `Assistant: ${data.response}`,
+      ]);
+      setChatMessage("");
+    } catch (error) {
+      console.error("Error submitting chat message:", error);
+      setOutput({ status: "error", message: "Error submitting chat message" });
     }
   };
 
@@ -257,6 +289,25 @@ const PromptInput: React.FC = () => {
             <li key={index}>{checkpoint}</li>
           ))}
         </ul>
+      </div>
+
+      <div className="container chat">
+        <h2>Chat with Assistant</h2>
+        <div className="chat-history">
+          {chatHistory.map((message, index) => (
+            <p key={index}>{message}</p>
+          ))}
+        </div>
+        <form onSubmit={handleChatSubmit}>
+          <input
+            type="text"
+            value={chatMessage}
+            onChange={(e) => setChatMessage(e.target.value)}
+            placeholder="Enter your message"
+            required
+          />
+          <button type="submit">Send</button>
+        </form>
       </div>
     </div>
   );

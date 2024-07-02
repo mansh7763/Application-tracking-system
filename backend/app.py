@@ -1,6 +1,6 @@
 import os
 import base64
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from supabase import create_client, Client
 from sqlalchemy import create_engine
@@ -12,6 +12,9 @@ import google.generativeai as genai
 from io import BytesIO
 import numpy as np
 import json
+from genai import Genai
+from langchain.memory import ConversationBufferWindowMemory
+
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -31,6 +34,9 @@ API_KEY_GEMINI = os.getenv('API_TOKEN_GEMINI')
 
 # Initialize Supabase client
 supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Initialize the conversation buffer memory
+memory = ConversationBufferWindowMemory(k=50)
 
 # Initialize SentenceTransformer model
 model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -71,6 +77,9 @@ def get_response_from_llm(input_text):
     output = model.generate_content(input_text)
     response = output.text
     return response
+
+
+
 
 
 # Route for file upload
@@ -136,7 +145,6 @@ def prompt():
         logging.debug(f"query: {query} and shortlisted candidate: {number}")
 
         # Fetch top 100 resumes and their embeddings
-        # Fetch top 100 resumes and their embeddings
         response = supabase_client.table('resumes').select('resumetext', 'embedding', 'score').order('score', desc=True).limit(100).execute()
 
         # Check if the response has data
@@ -154,7 +162,6 @@ def prompt():
             logging.error("No data found in the response.")
 
         top_n_embeddings_list = [json.loads(embedding) for embedding in top_n_embeddings]
-
 
         # Calculate similarities and retrieve top N resumes
         query_embedding = get_embeddings(query).tolist()
@@ -177,7 +184,6 @@ def prompt():
             return jsonify({'error': 'Invalid embeddings format'}), 500
 
         # Calculate cosine similarities
-        # similarities = [util.pytorch_cos_sim(query_embedding, embeddings) for embeddings in top_n_embeddings]
         similarities = []
         for embeddings in top_n_embeddings_np:
             # logging.debug(f"Embedding data type: {type(embeddings)}")
@@ -191,12 +197,10 @@ def prompt():
         similarities = [score * 100.0 for score in similarities]
         logging.debug(f"Query Similarities score: {similarities}")
         logging.debug(f"Query Similarities score: {len(similarities)}")
-        
-        updated_similarity_score = [a*b for a,b in zip(similarities,resume_score_100)]
 
+        # inc.the weightage of first resume_score_100 with 1.5
+        updated_similarity_score = [a+(b*1.5) for a,b in zip(similarities,resume_score_100)]
         logging.debug(f"updated Similarities score: {updated_similarity_score}")
-
-
 
         # Get top N indices
         similarities = np.array(updated_similarity_score)
@@ -204,13 +208,16 @@ def prompt():
         logging.debug(f"Indices are: {similarity_position}")
         top_indices= sorted(range(len(similarity_position)), key=lambda i: similarity_position[i], reverse=True)
         logging.debug(f"Top indices are: {top_indices}")
-        output_indices = top_indices[:int(number)]
+        output_indices = top_indices[:int(number)+1]
         logging.debug(f"Output indices are: {output_indices}")
 
         # Retrieve the content of the top N resumes
         all_pdf_texts = [resume_content[i] for i in output_indices]
         # logging.debug(f"Top N resume content: {all_pdf_texts}")
 
+        # Add query and resume content to memory
+        memory.add_context(query)
+        memory.add_context(all_pdf_texts)
 
         # Create input text for LLM
         input_text = create_input_text(all_pdf_texts, number, query)
@@ -218,14 +225,50 @@ def prompt():
 
         # Get response from LLM
         final_response = get_response_from_llm(input_text)
-
         logging.debug(f"Final response from LLM: \n\n\n\n{final_response}")
+
 
         return jsonify({'response': final_response})
 
     except Exception as e:
         logging.error(f"An error occurred during prompt processing: {e}")
         return jsonify({'error': 'Failed to process prompt'}), 500
+    
+
+# Route for chatting:
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    try:
+        data = request.json
+        user_message = data.get('message')
+        logging.debug(f"Received message: {user_message}")
+
+        # Append the user's message to memory
+        memory.append(user_message)
+        logging.debug(f"Current memory buffer: {memory.buffer}")
+
+        # Create input text for the LLM
+        chat_input_text = "\n".join(memory.buffer)
+        logging.debug(f"Input text for chat LLM: {chat_input_text}")
+
+        chat_response = get_chat_response_from_llm(chat_input_text)
+
+        # Append the assistant's response to memory
+        memory.append(chat_response)
+        logging.debug(f"Updated memory buffer: {memory.buffer}")
+
+        return jsonify({'response': chat_response}), 200
+
+    except Exception as e:
+        logging.error(f"Error handling chat: {e}")
+        return jsonify({'error': 'Failed to handle chat'}), 500
+
+def get_chat_response_from_llm(chat_input_text):
+    genai.configure(api_key=API_KEY_GEMINI)
+    model = genai.GenerativeModel('gemini-1.0-pro')
+    output = model.generate_content(chat_input_text)
+    response = output.text
+    return response
 
 
 if __name__ == '__main__':
