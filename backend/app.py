@@ -12,7 +12,6 @@ import google.generativeai as genai
 from io import BytesIO
 import numpy as np
 import json
-from genai import Genai
 from langchain.memory import ConversationBufferWindowMemory
 
 
@@ -37,6 +36,9 @@ supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Initialize the conversation buffer memory
 memory = ConversationBufferWindowMemory(k=50)
+# global context
+context = "I'll provide you Selected resume content and User query, you have to reply the query according to this selected resume content .\n\n"
+
 
 # Initialize SentenceTransformer model
 model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -138,6 +140,7 @@ def upload_file():
 # Route for generating response from prompt
 @app.route('/api/prompt', methods=['POST'])
 def prompt():
+    global context
     try:
         data = request.json
         query = data.get('prompt')
@@ -216,8 +219,15 @@ def prompt():
         # logging.debug(f"Top N resume content: {all_pdf_texts}")
 
         # Add query and resume content to memory
-        memory.add_context(query)
-        memory.add_context(all_pdf_texts)
+        # Convert the list of resume contents to a single string
+        all_pdf_texts_str = "\n\n".join(all_pdf_texts)
+        # memory.save_context({"input":query}, {"output":all_pdf_texts_str})
+        # memory.save_context("all pdf content", all_pdf_texts)
+         # Update context with query and answer
+        context += f"\nSelected resumes content:\n{all_pdf_texts_str}\n"
+        context += f"\nUser:\n{query}\n\n"
+
+
 
         # Create input text for LLM
         input_text = create_input_text(all_pdf_texts, number, query)
@@ -226,6 +236,7 @@ def prompt():
         # Get response from LLM
         final_response = get_response_from_llm(input_text)
         logging.debug(f"Final response from LLM: \n\n\n\n{final_response}")
+        context += f"\nAssistant: {final_response}\n\n"
 
 
         return jsonify({'response': final_response})
@@ -238,24 +249,29 @@ def prompt():
 # Route for chatting:
 @app.route('/api/chat', methods=['POST'])
 def chat():
+    global context
+    global first_response
     try:
         data = request.json
         user_message = data.get('message')
-        logging.debug(f"Received message: {user_message}")
+        
 
         # Append the user's message to memory
-        memory.append(user_message)
-        logging.debug(f"Current memory buffer: {memory.buffer}")
+        # memory.save_context({'user meassage':user_message})
+        # logging.debug(f"Current memory buffer: {memory.buffer}")
 
         # Create input text for the LLM
-        chat_input_text = "\n".join(memory.buffer)
-        logging.debug(f"Input text for chat LLM: {chat_input_text}")
-
-        chat_response = get_chat_response_from_llm(chat_input_text)
+        # chat_input_text = "\n".join(memory.buffer)
+        # logging.debug(f"Input text for chat LLM: {chat_input_text}")
+        logging.debug(f"Current context: {context}")
+        logging.debug(f"Received new query: {user_message}")
+        
+        context += f"\nUser Query: {user_message}"
+        chat_response = get_response_from_llm(context)
+        logging.debug(f"Chat response from LLM: {chat_response}")
 
         # Append the assistant's response to memory
-        memory.append(chat_response)
-        logging.debug(f"Updated memory buffer: {memory.buffer}")
+        context += f"\nAssistant: {chat_response}\n"
 
         return jsonify({'response': chat_response}), 200
 

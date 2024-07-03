@@ -170,18 +170,6 @@ const PromptInput: React.FC = () => {
     ]);
   };
 
-  const parseTableData = (data: string) => {
-    const rows = data.trim().split("\n");
-    const headers = rows[1].split("|").map((header) => header.trim());
-    const tableData = rows.slice(3).map((row) =>
-      row
-        .split("|")
-        .map((cell) => cell.trim())
-        .slice(1, -1)
-    );
-    return { headers, tableData };
-  };
-
   return (
     <div
       style={{
@@ -250,33 +238,6 @@ const PromptInput: React.FC = () => {
             <div>
               <h2>Message:</h2>
               <p>{output.message}</p>
-            </div>
-          )}
-          {output.response && (
-            <div>
-              <h2>Response:</h2>
-              <table>
-                <thead>
-                  <tr>
-                    {parseTableData(output.response).headers.map(
-                      (header, index) => (
-                        <th key={index}>{header}</th>
-                      )
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {parseTableData(output.response).tableData.map(
-                    (row, rowIndex) => (
-                      <tr key={rowIndex}>
-                        {row.map((cell, cellIndex) => (
-                          <td key={cellIndex}>{cell}</td>
-                        ))}
-                      </tr>
-                    )
-                  )}
-                </tbody>
-              </table>
             </div>
           )}
         </div>
