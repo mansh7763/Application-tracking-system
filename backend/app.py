@@ -7,12 +7,14 @@ from sqlalchemy import create_engine
 from dotenv import load_dotenv
 import fitz
 import logging
-from sentence_transformers import SentenceTransformer, util
+from sentence_transformers import util  #, SentenceTransformer
 import google.generativeai as genai
 from io import BytesIO
 import numpy as np
 import json
-from langchain.memory import ConversationBufferWindowMemory
+# from langchain.memory import ConversationBufferWindowMemory
+from tenacity import retry, stop_after_attempt, wait_fixed
+
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -35,13 +37,13 @@ API_KEY_GEMINI = os.getenv('API_TOKEN_GEMINI')
 supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Initialize the conversation buffer memory
-memory = ConversationBufferWindowMemory(k=50)
+# memory = ConversationBufferWindowMemory(k=50)
 # global context
 context = "I'll provide you Selected resume content and User query, you have to reply the query according to this selected resume content .\n\n"
 
 
 # Initialize SentenceTransformer model
-model = SentenceTransformer('all-MiniLM-L6-v2')
+# model = SentenceTransformer('all-MiniLM-L6-v2')
 # Function to extract text from PDF file
 def extract_text_from_pdf(file_stream):
     try:
@@ -54,14 +56,38 @@ def extract_text_from_pdf(file_stream):
         logging.error(f"Error extracting text from PDF: {e}")
         return ""
 
-# Function to get embeddings of text using SentenceTransformer model
+# # Function to get embeddings of text using SentenceTransformer model
+# def get_embeddings(text):
+#     try:
+#         embeddings = model.encode(text, convert_to_tensor=True)
+#         return embeddings
+#     except Exception as e:
+#         logging.error(f"Error getting embeddings: {e}")
+#         return []
+
+
+
+def make_embed_text_fn(model):
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+    def embed_fn(text: str) -> list[float]:
+        # Set the task_type to CLASSIFICATION.
+        embedding = genai.embed_content(model=model, content=text, task_type="classification")
+        return embedding['embedding']
+
+    return embed_fn
+
+# Function to get embeddings of text using Gemini embeddings
 def get_embeddings(text):
+    genai.configure(api_key=API_KEY_GEMINI)
+    model = 'models/embedding-001'
     try:
-        embeddings = model.encode(text, convert_to_tensor=True)
+        embed_fn = make_embed_text_fn(model)
+        embeddings = embed_fn(text)
         return embeddings
     except Exception as e:
         logging.error(f"Error getting embeddings: {e}")
         return []
+
     
 # Function to create input text for LLM
 def create_input_text(all_pdf_texts, number, query_text):
@@ -124,7 +150,7 @@ def upload_file():
                 res = supabase_client.table('resumes').insert({
                     'resumetext': content, 
                     'score': score.item(), 
-                    'embedding': content_embeddings.tolist()
+                    'embedding': content_embeddings    #.tolist()
                 }).execute()
                 # logging.debug(f"Saved data to database: {res}")
 
@@ -167,7 +193,7 @@ def prompt():
         top_n_embeddings_list = [json.loads(embedding) for embedding in top_n_embeddings]
 
         # Calculate similarities and retrieve top N resumes
-        query_embedding = get_embeddings(query).tolist()
+        query_embedding = get_embeddings(query)   #.tolist()
         # logging.debug(f"Query embedding shape: {query_embedding}")
 
         # Ensure query embedding is not empty
